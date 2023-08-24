@@ -1,7 +1,9 @@
 # Planned structure
 
-`/_shorten`
+`/:uri` follows shortened uri
 
-`/{shortened}`
+`/_shorten/:uri` shortens given uri
 
-`/_delete`
+`/_delete/:uri` deletes shortened uri
+
+`/_info/:uri` info about shortened uri
