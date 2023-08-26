@@ -1,20 +1,13 @@
-extern crate pretty_env_logger;
-
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::{Arc, Mutex}};
 
 use axum::{extract::ConnectInfo, Router};
-use log::{debug, error, info, warn};
+use logger::{logger::Logger, level::Level::Info, log_field::LogField::{Date, Time, Seperator, Message, Level}};
+
+
+static LOGGER: Arc<Mutex<Logger>> = Arc::new(Mutex::new(Logger::new(Info, std::io::stdout(), vec![Date, Seperator(String::from("T")), Time, Seperator(String::from(" ")), Level, Seperator(String::from("")), Message])));
 
 #[tokio::main]
 async fn main() {
-    pretty_env_logger::formatted_builder()
-        .filter(Some("path::to:module"), log::LevelFilter::Info)
-        .write_style(pretty_env_logger::env_logger::WriteStyle::Always)
-        .init();
-    warn!("Warn");
-    info!("Info");
-    error!("Error");
-    debug!("Debug");
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
     let app = Router::new()
         .route("/:uri", axum::routing::get(follow))

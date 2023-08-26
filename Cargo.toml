@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 axum = "0.6.20"
 tokio = { version = "1.32.0", features = ["full"] }
+logger = { git = "https://github.com/GamingGuy003/logger.git" }
