@@ -1,9 +1,9 @@
 # Planned structure
 
-`/:uri` follows shortened uri
+GET `/:uri` follows shortened uri
 
-`/_shorten/:uri` shortens given uri
+POST `/_shorten/:uri` shortens given uri
 
-`/_delete/:uri` deletes shortened uri
+DELETE `/_delete/:uri` deletes shortened uri
 
-`/_info/:uri` info about shortened uri
+GET `/_info/:uri` info about shortened uri
