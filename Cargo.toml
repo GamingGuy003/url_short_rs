@@ -7,5 +7,5 @@ edition = "2021"
 
 [dependencies]
 axum = "0.6.20"
+sqlite = { version = "0.31.1", features = ["bundled"] }
 tokio = { version = "1.32.0", features = ["full"] }
-logger = { git = "https://github.com/GamingGuy003/logger.git" }
