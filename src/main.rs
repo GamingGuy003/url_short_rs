@@ -1,25 +1,23 @@
-use std::{net::SocketAddr, sync::{Arc, Mutex}};
+use std::net::SocketAddr;
 
-use axum::{extract::ConnectInfo, Router};
-use sqlite::Connection;
+use axum::{extract::ConnectInfo, Router, Extension};
+use axum_sqlite::Database;
+
+static DBURL: &str = "db";
+static TABLE: &str = "translations";
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     // create server addr
     let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
 
-    // connect to sqlite
-    let sql_connection = Arc::new(Mutex::new(match sqlite::open("./db") {
-        Ok(connection) => connection,
-        Err(err) => return Err(std::io::Error::new(std::io::ErrorKind::NotConnected, err))
-    }));
-
     // define routes
     let app = Router::new()
         .route("/:uri", axum::routing::get(follow))
         .route("/_shorten/:uri", axum::routing::post(shorten))
         .route("/_delete/:uri", axum::routing::delete(delete))
-        .route("/_info/:uri", axum::routing::get(info));
+        .route("/_info/:uri", axum::routing::get(info))
+        .layer(Database::new(DBURL).expect("Could not connect to sqlite"));
 
     // startup webserver
     axum::Server::bind(&addr)
@@ -27,32 +25,35 @@ async fn main() -> std::io::Result<()> {
         .await
         .unwrap();
 
+    // big brain
     Ok(())
 }
 
-async fn initialize_db(mut connection: Connection) -> std::io::Result<()> {
-    let query = "
-        CREATE TABLE links(
-            original LONGTEXT,
-            shortened TEXT,
-        );
-    ";
-    connection.execute(query).unwrap();
-    Ok(())
+
+async fn follow(ConnectInfo(connection): ConnectInfo<SocketAddr>, Extension(database): Extension<Database>) {
+    self::db_prepare(Extension(database));
 }
 
-async fn follow(ConnectInfo(connection): ConnectInfo<SocketAddr>) {
-
+async fn shorten(ConnectInfo(connection): ConnectInfo<SocketAddr>, Extension(database): Extension<Database>) {
+    self::db_prepare(Extension(database));
 }
 
-async fn shorten(ConnectInfo(connection): ConnectInfo<SocketAddr>) {
-
+async fn delete(ConnectInfo(connection): ConnectInfo<SocketAddr>, Extension(database): Extension<Database>) {
+    self::db_prepare(Extension(database));
 }
 
-async fn delete(ConnectInfo(connection): ConnectInfo<SocketAddr>) {
-
+async fn info(ConnectInfo(connection): ConnectInfo<SocketAddr>, Extension(database): Extension<Database>) {
+    self::db_prepare(Extension(database));
 }
 
-async fn info(ConnectInfo(connection): ConnectInfo<SocketAddr>) {
-
+fn db_prepare(Extension(database): Extension<Database>) {
+    let connection = database.connection().expect("Could not establish db connection");
+    let query = format!("SELECT name FROM sqlite_master WHERE type='table' AND name='{}'", TABLE);
+    let exists = connection.query_row(&query, [], |row| { Ok(row.get::<_, Option<String>>(0)?.is_some()) }).is_ok();
+    println!("exists: {}", exists);
+    if !exists {
+        println!("Database does not exist, creating...");
+        let query = format!("CREATE TABLE {} ( original LONGTEXT, shortened TEXT );", TABLE);
+        connection.execute(&query, []).expect("Failed to create table");
+    }
 }
