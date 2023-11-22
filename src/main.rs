@@ -1,59 +1,26 @@
-use std::net::SocketAddr;
-
-use axum::{extract::ConnectInfo, Router, Extension};
-use axum_sqlite::Database;
+use std::{net::TcpListener, io::{Read, Write, BufReader, BufRead}};
 
 static DBURL: &str = "db";
 static TABLE: &str = "translations";
 
-#[tokio::main]
-async fn main() -> std::io::Result<()> {
-    // create server addr
-    let addr = SocketAddr::from(([0, 0, 0, 0], 8080));
+mod http;
 
-    // define routes
-    let app = Router::new()
-        .route("/:uri", axum::routing::get(follow))
-        .route("/_shorten/:uri", axum::routing::post(shorten))
-        .route("/_delete/:uri", axum::routing::delete(delete))
-        .route("/_info/:uri", axum::routing::get(info))
-        .layer(Database::new(DBURL).expect("Could not connect to sqlite"));
-
-    // startup webserver
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
-        .await
-        .unwrap();
-
-    // big brain
-    Ok(())
-}
-
-
-async fn follow(ConnectInfo(connection): ConnectInfo<SocketAddr>, Extension(database): Extension<Database>) {
-    self::db_prepare(Extension(database));
-}
-
-async fn shorten(ConnectInfo(connection): ConnectInfo<SocketAddr>, Extension(database): Extension<Database>) {
-    self::db_prepare(Extension(database));
-}
-
-async fn delete(ConnectInfo(connection): ConnectInfo<SocketAddr>, Extension(database): Extension<Database>) {
-    self::db_prepare(Extension(database));
-}
-
-async fn info(ConnectInfo(connection): ConnectInfo<SocketAddr>, Extension(database): Extension<Database>) {
-    self::db_prepare(Extension(database));
-}
-
-fn db_prepare(Extension(database): Extension<Database>) {
-    let connection = database.connection().expect("Could not establish db connection");
-    let query = format!("SELECT name FROM sqlite_master WHERE type='table' AND name='{}'", TABLE);
-    let exists = connection.query_row(&query, [], |row| { Ok(row.get::<_, Option<String>>(0)?.is_some()) }).is_ok();
-    println!("exists: {}", exists);
-    if !exists {
-        println!("Database does not exist, creating...");
-        let query = format!("CREATE TABLE {} ( original LONGTEXT, shortened TEXT );", TABLE);
-        connection.execute(&query, []).expect("Failed to create table");
+fn main() -> std::io::Result<()> {
+    let listener = TcpListener::bind("0.0.0.0:8080")?;
+    for stream in listener.incoming() {
+        let mut stream = stream?;
+        println!("Incomming connection: {}", stream.peer_addr()?);
+        let buf_reader = BufReader::new(&stream);
+        let mut buffer = Vec::new();
+        for line in buf_reader.lines() {
+            let line = line?;
+            if line.is_empty() {
+                break;
+            }
+            buffer.push(line);
+        }
+        println!("{}", buffer.join("\n"));
+        stream.write(String::from("HTTP/2 200 OK").as_bytes())?;
     }
+    Ok(())
 }
