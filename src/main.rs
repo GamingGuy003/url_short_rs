@@ -1,26 +1,19 @@
-use std::{net::TcpListener, io::{Write, BufReader, BufRead}};
-
 // static DBURL: &str = "db";
 // static TABLE: &str = "translations";
 
-mod http;
+use http_serv::{self, http::{server::HttpServer, http_structs::{HttpResponse, HttpData}}};
 
 fn main() -> std::io::Result<()> {
-    let listener = TcpListener::bind("0.0.0.0:8080")?;
-    for stream in listener.incoming() {
-        let mut stream = stream?;
-        println!("Incomming connection: {}", stream.peer_addr()?);
-        let buf_reader = BufReader::new(&stream);
-        let mut buffer = Vec::new();
-        for line in buf_reader.lines() {
-            let line = line?;
-            if line.is_empty() {
-                break;
-            }
-            buffer.push(line);
-        }
-        stream.write(String::from("HTTP/2 200 OK").as_bytes())?;
-        println!("Sond");
-    }
+    let mut server = HttpServer::new("0.0.0.0".to_string(), "8443".to_string(), Vec::new())?;
+    server.get("/:test1/_ding".to_owned(), |request| {
+        println!("singletest");
+        HttpResponse::default()
+    });
+    server.get("/:test2/_ding/:test1".to_owned(), |request| {
+        let mut resp = HttpResponse::default();
+        resp.data = Some(HttpData::new(format!("{:#?}", request).as_bytes().to_vec()));
+        resp
+    });
+    server.run_loop()?;
     Ok(())
 }
