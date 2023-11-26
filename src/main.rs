@@ -26,8 +26,8 @@ fn main() -> std::io::Result<()> {
 
     let mut server = HttpServer::new("0.0.0.0".to_string(), "8443".to_string(), None, Vec::new())?;
 
-    let clone = pool_arc.clone();
     // follow the requested uri
+    let clone = pool_arc.clone();
     server.get("/:uri".to_owned(), move |request| {
         let con = clone.get();
         let mut resp = HttpResponse::new("1.1".to_string(), HttpStatus::MovedPermanently, Some(vec![("Location".to_owned(), "https://google.de".to_owned())]), None);
