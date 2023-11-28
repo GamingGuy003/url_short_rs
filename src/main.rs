@@ -1,6 +1,6 @@
 const DB_FILE: &str = "shorts.db";
 
-use std::{sync::Arc, process::exit};
+use std::{sync::Arc, process::exit, clone};
 
 use http_serv::{self, http::{server::HttpServer, http_structs::{HttpResponse, HttpData, HttpStatus}}};
 use r2d2::PooledConnection;
@@ -26,43 +26,40 @@ fn main() -> std::io::Result<()> {
 
     let mut server = HttpServer::new("0.0.0.0".to_string(), "8443".to_string(), None, Vec::new())?;
 
+    let delete = pool_arc.clone();
+    let info = pool_arc.clone();
+    
     // follow the requested uri
     let clone = pool_arc.clone();
-    server.get("/:uri".to_owned(), move |request| {
-        let con = clone.get();
+    server.get("/:uri".to_owned(), Box::new(|request| {
+        clone;
         let mut resp = HttpResponse::new("1.1".to_string(), HttpStatus::MovedPermanently, Some(vec![("Location".to_owned(), "https://google.de".to_owned())]), None);
         resp.data = Some(HttpData::new(format!("{:#?}", request).as_bytes().to_vec()));
         resp
-    });
-
-    let clone = pool_arc.clone();
-    // follow the requested uri
-    server.get("/:uri".to_owned(), move |request| {
-        let con = clone.get();
-        let mut resp = HttpResponse::new("1.1".to_string(), HttpStatus::MovedPermanently, Some(vec![("Location".to_owned(), "https://google.de".to_owned())]), None);
-        resp.data = Some(HttpData::new(format!("{:#?}", request).as_bytes().to_vec()));
-        resp
-    });
-
+    }));
+    
     // delete a shortlink
     let clone = pool_arc.clone();
-    server.delete("/_delete/:uri".to_owned(), move |request| {
-        let con = clone.get();
-
+    server.post("/_shorten/:uri".to_owned(), Box::new(|request| {
+        clone.get();
         let mut resp = HttpResponse::default();
         resp.data = Some(HttpData::new(format!("{:#?}", request).as_bytes().to_vec()));
         resp
-    });
+    }));
+
+    // delete a shortlink
+    server.delete("/_delete/:uri".to_owned(), Box::new(|request| {
+        let mut resp = HttpResponse::default();
+        resp.data = Some(HttpData::new(format!("{:#?}", request).as_bytes().to_vec()));
+        resp
+    }));
 
     // fetches info about the shortened uri
-    let clone = pool_arc.clone();
-    server.get("/_info/:uri".to_owned(), |request| {
-        let connection = clone.clone().get().unwrap();
-
+    server.get("/_info/:uri".to_owned(), Box::new(|request| {
         log::warn!("Useragent was {}", request.get_extra_header(String::from("User-Agent")).unwrap_or(String::from("not found")));
         let resp = HttpResponse::default();
         resp
-    });
+    }));
     server.run_loop()?;
     Ok(())
 }
