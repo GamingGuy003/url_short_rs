@@ -2,9 +2,14 @@ const DB_FILE: &str = "shorts.db";
 
 use std::{sync::Arc, process::exit};
 
-use http_serv::{self, http::{server::HttpServer, http_structs::{HttpResponse, HttpData, HttpStatus}}};
-use r2d2::PooledConnection;
-use r2d2_sqlite::{SqliteConnectionManager, rusqlite::params};
+use database::database::setup_table;
+use http_serv::{self, http::{server::HttpServer, http_structs::{HttpResponse, HttpData, HttpStatus, HttpRequest}}};
+use r2d2_sqlite::SqliteConnectionManager;
+
+use crate::{database::database::{get_details, delete_short_uri, add_real_uri, add_detail, fetch_real_uri}, structs::structs::{DetailEntry, Shorten}};
+
+mod structs;
+mod database;
 
 extern crate pretty_env_logger;
 
@@ -24,139 +29,315 @@ fn main() -> std::io::Result<()> {
     }
 
 
-    let mut server = HttpServer::new("0.0.0.0".to_string(), "8443".to_string(), None, Vec::new())?;
+    let mut server = HttpServer::new("0.0.0.0".to_string(), "8443".to_string(), None, Vec::new(), None)?;
     
     // follow the requested uri
     let clone = pool_arc.clone();
-    server.get("/:suri".to_owned(), Box::new(move |request| {
-        let con = clone.get();
-        let mut resp = HttpResponse::new("1.1".to_string(), HttpStatus::MovedPermanently, Some(vec![("Location".to_owned(), "https://google.de".to_owned())]), None);
-        resp.data = Some(HttpData::new(format!("{:#?}", request).as_bytes().to_vec()));
-        resp
+    server.get("/:s_uri".to_owned(), Box::new(move |request: HttpRequest| {
+        log::trace!("Useragent was {}", request.get_extra_header(String::from("User-Agent")).unwrap_or(String::from("not found")));
+        let connection = match clone.clone().get() {
+            Ok(connection) => connection,
+            Err(err) => {
+                log::error!("Failed to get connection pointer: {err}");
+                return HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::PreconditionFailed,
+                    None,
+                    Some(HttpData::new(format!("Failed to get connection pointer: {err}").into_bytes()))
+                )
+            }
+        };
+
+        let s_uri = match request.get_route_param(String::from(":s_uri")) {
+            Some(s_uri) => s_uri,
+            None => {
+                log::error!("No short URI provided");
+                return HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::ExpectationFailed,
+                    None,
+                    Some(HttpData::new(String::from("No short URI provided").into_bytes()))
+                )
+            }
+        };
+
+        let r_uri = match fetch_real_uri(connection, s_uri.clone()) {
+            Ok(r_uri) => {
+                r_uri
+            },
+            Err(err) => {
+                log::error!("Failed to fetch URI mapping: {err}");
+                return HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::NotFound,
+                    None,
+                    Some(HttpData::new(format!("Failed to fetch URI mapping: {err}").into_bytes()))
+                )
+            }
+        };
+
+        let connection = match clone.clone().get() {
+            Ok(connection) => connection,
+            Err(err) => {
+                log::error!("Failed to get connection pointer: {err}");
+                return HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::PreconditionFailed,
+                    None,
+                    Some(HttpData::new(format!("Failed to get connection pointer: {err}").into_bytes()))
+                )
+            }
+        };
+
+        match add_detail(connection, s_uri, request.client_ip) {
+            Ok(_) => {},
+            Err(err) => {
+                log::error!("Failed to delete URI mapping: {err}");
+                return HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::InternalServerError,
+                    None,
+                    Some(HttpData::new(format!("Failed to delete URI mapping: {err}").into_bytes()))
+                )
+            }
+        }
+
+        log::trace!("Redirecting to {r_uri}");
+        HttpResponse::new(
+            String::from("1.1"),
+            HttpStatus::PermanentRedirect,
+            Some(vec![("Location".to_owned(), format!("{r_uri}"))]),
+            None
+        )
     }));
 
     // shorten given uri
     let clone = pool_arc.clone();
-    server.put("/_shorten".to_owned(), Box::new(move |request| {
-        let con = clone.get();
-        let mut resp = HttpResponse::new("1.1".to_string(), HttpStatus::MovedPermanently, Some(vec![("Location".to_owned(), "https://google.de".to_owned())]), None);
-        resp.data = Some(HttpData::new(format!("{:#?}", request).as_bytes().to_vec()));
-        resp
+    server.post("/_shorten".to_owned(), Box::new(move |request: HttpRequest| {
+        log::trace!("Useragent was {}", request.get_extra_header(String::from("User-Agent")).unwrap_or(String::from("not found")));
+        let connection = match clone.clone().get() {
+            Ok(connection) => connection,
+            Err(err) => {
+                log::error!("Failed to get connection pointer: {err}");
+                return HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::PreconditionFailed,
+                    None,
+                    Some(HttpData::new(format!("Failed to get connection pointer: {err}").into_bytes()))
+                )
+            }
+        };
+
+        let r_uri: Shorten = match request.data {
+            Some(http_data) => {
+                match String::from_utf8(http_data.data) {
+                    Ok(r_uri) => {
+                        match serde_json::from_str(&r_uri) {
+                            Ok(r_uri) => r_uri,
+                            Err(err) => {
+                                log::error!("Failed to deserialize data: {err}");
+                                return HttpResponse::new(
+                                    String::from("1.1"),
+                                    HttpStatus::PreconditionFailed,
+                                    None,
+                                    Some(HttpData::new(format!("Failed to deserialize data: {err}").into_bytes()))
+                                )
+                            }
+                        }
+                    },
+                    Err(err) => {
+                        log::error!("Failed to deserialize data: {err}");
+                        return HttpResponse::new(
+                            String::from("1.1"),
+                            HttpStatus::PreconditionFailed,
+                            None,
+                            Some(HttpData::new(format!("Failed to deserialize data: {err}").into_bytes()))
+                        )
+                    }
+                }
+            },
+            None => {
+                log::error!("No real URI provided");
+                return HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::ExpectationFailed,
+                    None,
+                    Some(HttpData::new(String::from("No real URI provided").into_bytes()))
+                )
+            }
+        };
+
+        match add_real_uri(connection, r_uri.r_uri) {
+            Ok(s_uri) => {
+                HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::Ok,
+                    None,
+                    Some(HttpData::new(s_uri.into_bytes()))
+                )
+            },
+            Err(err) => {
+                log::error!("Failed to delete URI mapping: {err}");
+                HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::InternalServerError,
+                    None,
+                    Some(HttpData::new(format!("Failed to delete URI mapping: {err}").into_bytes()))
+                )
+            }
+        }
     }));
 
     // delete a shortlink
     let clone = pool_arc.clone();
-    server.delete("/_delete/:suri".to_owned(), Box::new(move |request| {
-        let con = clone.get();
-        let mut resp = HttpResponse::default();
-        resp.data = Some(HttpData::new(format!("{:#?}", request).as_bytes().to_vec()));
-        resp
+    server.delete("/_delete/:s_uri".to_owned(), Box::new(move |request: HttpRequest| {
+        log::trace!("Useragent was {}", request.get_extra_header(String::from("User-Agent")).unwrap_or(String::from("not found")));
+        let connection = match clone.clone().get() {
+            Ok(connection) => connection,
+            Err(err) => {
+                log::error!("Failed to get connection pointer: {err}");
+                return HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::PreconditionFailed,
+                    None,
+                    Some(HttpData::new(format!("Failed to get connection pointer: {err}").into_bytes()))
+                )
+            }
+        };
+
+        let s_uri = match request.get_route_param(String::from(":s_uri")) {
+            Some(s_uri) => s_uri,
+            None => {
+                log::error!("No short URI provided");
+                return HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::ExpectationFailed,
+                    None,
+                    Some(HttpData::new(String::from("No short URI provided").into_bytes()))
+                )
+            }
+        };
+
+        match delete_short_uri(connection, s_uri) {
+            Ok(_) => HttpResponse::new(
+                String::from("1.1"),
+                HttpStatus::Ok,
+                None,
+                None
+            ),
+            Err(err) => {
+                log::error!("Failed to delete URI mapping: {err}");
+                HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::InternalServerError,
+                    None,
+                    Some(HttpData::new(format!("Failed to delete URI mapping: {err}").into_bytes()))
+                )
+            }
+        }
     }));
 
-    // fetches info about the shortened uri
+    // fetches info about the shortened uri in 100 entry pages
     let clone = pool_arc.clone();
-    server.get("/_info/:suri".to_owned(), Box::new(move|request| {
-        let con = clone.clone().get().unwrap();
-        log::warn!("Useragent was {}", request.get_extra_header(String::from("User-Agent")).unwrap_or(String::from("not found")));
-        let resp = HttpResponse::default();
-        resp
+    server.get("/_info/:s_uri/:page".to_owned(), Box::new(move|request: HttpRequest| {
+        log::trace!("Useragent was {}", request.get_extra_header(String::from("User-Agent")).unwrap_or(String::from("not found")));
+        let connection = match clone.clone().get() {
+            Ok(connection) => connection,
+            Err(err) => {
+                log::error!("Failed to get connection pointer: {err}");
+                return HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::PreconditionFailed,
+                    None,
+                    Some(HttpData::new(format!("Failed to get connection pointer: {err}").into_bytes()))
+                )
+            }
+        };
+
+        let s_uri = match request.get_route_param(String::from(":s_uri")) {
+            Some(s_uri) => s_uri,
+            None => {
+                log::error!("No short URI provided");
+                return HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::BadRequest,
+                    None,
+                    Some(HttpData::new(String::from("No short URI provided").into_bytes()))
+                )
+            }
+        };
+
+        let page = match request.get_route_param(String::from(":page")) {
+            Some(s_uri) => match s_uri.parse::<usize>() {
+                Ok(page) => {
+                    if page <= 0 {
+                        return HttpResponse::new(
+                        String::from("1.1"),
+                        HttpStatus::BadRequest,
+                        None,
+                        Some(HttpData::new(String::from("Invalid page identifier").into_bytes()))
+                        )
+                    }
+                    page
+                },
+                Err(_) => {
+                    log::error!("Invalid page identifier");
+                    return HttpResponse::new(
+                        String::from("1.1"),
+                        HttpStatus::BadRequest,
+                        None,
+                        Some(HttpData::new(String::from("Invalid page identifier").into_bytes()))
+                    )
+                },
+            },
+            None => {
+                log::error!("No page provided");
+                return HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::BadRequest,
+                    None,
+                    Some(HttpData::new(String::from("No page provided").into_bytes()))
+                )
+            }
+        };
+
+        match get_details(connection, s_uri, page, 100 as usize) {
+            Ok(details) => {
+                let details_structs = details.iter().map(|elem| {
+                    DetailEntry::new(elem.1.clone(), format!("{}", elem.0), elem.2.clone())
+                }).collect::<Vec<DetailEntry>>();
+                let serialized_structs: String = match serde_json::to_string(&details_structs) {
+                    Ok(serialized_structs) => serialized_structs,
+                    Err(err) => {
+                        log::error!("Failed to serialize data: {err}");
+                        return HttpResponse::new(
+                            String::from("1.1"),
+                            HttpStatus::InternalServerError,
+                            None,
+                            Some(HttpData::new(format!("Failed to parse data: {err}").into_bytes()))
+                        )
+                    }
+                };
+                HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::Ok,
+                    None,
+                    Some(HttpData::new(serialized_structs.into_bytes()))
+                )
+            },
+            Err(err) => {
+                log::error!("Failed to fetch details : {err}");
+                HttpResponse::new(
+                    String::from("1.1"),
+                    HttpStatus::InternalServerError,
+                    None,
+                    Some(HttpData::new(format!("Failed to fetch details: {err}").into_bytes()))
+                )
+            }
+        }
     }));
+
     server.run_loop()?;
     Ok(())
 }
 
-fn setup_table(connection: PooledConnection<SqliteConnectionManager>) -> Result<(), r2d2_sqlite::rusqlite::Error> {
-    match connection.execute(
-        "CREATE TABLE IF NOT EXISTS uri_map (
-                suri INTEGER NOT NULL PRIMARY KEY,
-                ruri TEXT(2048) NOT NULL
-            )", [])
-    {
-        Ok(cols) => {
-            if cols != 0 {
-                log::debug!("Created table uri_map")
-            }
-        },
-        Err(err) => {
-            log::trace!("Encountered error while setting up table uri_map: {err}");
-            return Err(err);
-        }
-    }
-
-    match connection.execute(
-        "CREATE TABLE IF NOT EXISTS uri_details (
-                suri INT NOT NULL,
-                clientip TEXT(128) NOT NULL,
-                time TIMESTAMP NOT NULL,
-                FOREIGN KEY(suri) REFERENCES uri_map(suri)
-            )", [])
-    {
-        Ok(cols) => {
-            if cols != 0 {
-                log::debug!("Created table uri_details")
-            }
-            Ok(())
-        },
-        Err(err) => {
-            log::trace!("Encountered error while setting up table uri_details: {err}");
-            Err(err)
-        }
-    }
-}
-
-fn fetch_real_uri(connection: PooledConnection<SqliteConnectionManager>, suri: String) -> Result<String, r2d2_sqlite::rusqlite::Error> {
-    let mut stmt = match connection.prepare("SELECT ruri FROM  uri_map WHERE suri = ?1") {
-        Ok(stmt) => stmt,
-        Err(err) => {
-            log::trace!("Failed to prepare statement for fetching rURI for {suri}: {err}");
-            return Err(err);
-        }
-    };
-
-    match stmt.query_row(params![suri], |row| row.get(0)) {
-        Ok(ruri) => Ok(ruri),
-        Err(err) => {
-            log::trace!("Failed to get rURI: {err}");
-            Err(err)
-        }
-    }
-}
-
-fn add_real_uri(connection: PooledConnection<SqliteConnectionManager>, ruri: String) -> Result<String, r2d2_sqlite::rusqlite::Error> {
-    match connection.execute("INSERT INTO uri_map (ruri) VALUES (?1)", params![ruri]) {
-        Ok(cols) => {
-            if cols != 0 {
-                log::debug!("Inserted {ruri} into uri_map")
-            }
-        },
-        Err(err) => {
-            log::trace!("Encountered error while inserting rURI into uri_map: {err}");
-            return Err(err)
-        }
-    }
-    let suri: Result<i32, r2d2_sqlite::rusqlite::Error> = connection.query_row("SELECT last_insert_rowid()", [], |row| row.get(0));
-    match suri {
-        Ok(suri) => Ok(format!("{suri}")),
-        Err(err) => {
-            log::trace!("Failed to fetch sURI: {err}");
-            Err(err)
-        }
-    }
-}
-
-fn delete_short_uri(connection: PooledConnection<SqliteConnectionManager>, suri: String) -> Result<(), r2d2_sqlite::rusqlite::Error> {
-    match connection.execute("DELETE FROM uri_map WHERE suri = ?1", params![suri]) {
-        Ok(cols) => {
-            if cols != 0 {
-                log::debug!("Removed {suri} from uri_map")
-            } else {
-                log::debug!("No entry to remove with sURI {suri}")
-            }
-        },
-        Err(err) => {
-            log::trace!("Encountered error while removing sURI from uri_map: {err}");
-            return Err(err)
-        }
-    }
-    Ok(())
-}
