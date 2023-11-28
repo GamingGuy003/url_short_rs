@@ -1,6 +1,6 @@
 const DB_FILE: &str = "shorts.db";
 
-use std::{sync::Arc, process::exit, clone};
+use std::{sync::Arc, process::exit};
 
 use http_serv::{self, http::{server::HttpServer, http_structs::{HttpResponse, HttpData, HttpStatus}}};
 use r2d2::PooledConnection;
@@ -28,16 +28,16 @@ fn main() -> std::io::Result<()> {
     
     // follow the requested uri
     let clone = pool_arc.clone();
-    server.get("/:suri".to_owned(), move |request| {
+    server.get("/:suri".to_owned(), Box::new(move |request| {
         let con = clone.get();
         let mut resp = HttpResponse::new("1.1".to_string(), HttpStatus::MovedPermanently, Some(vec![("Location".to_owned(), "https://google.de".to_owned())]), None);
         resp.data = Some(HttpData::new(format!("{:#?}", request).as_bytes().to_vec()));
         resp
-    });
+    }));
 
     // shorten given uri
     let clone = pool_arc.clone();
-    server.put("/_shorten".to_owned(), move |request| {
+    server.put("/_shorten".to_owned(), Box::new(move |request| {
         let con = clone.get();
         let mut resp = HttpResponse::new("1.1".to_string(), HttpStatus::MovedPermanently, Some(vec![("Location".to_owned(), "https://google.de".to_owned())]), None);
         resp.data = Some(HttpData::new(format!("{:#?}", request).as_bytes().to_vec()));
@@ -46,7 +46,7 @@ fn main() -> std::io::Result<()> {
 
     // delete a shortlink
     let clone = pool_arc.clone();
-    server.delete("/_delete/:suri".to_owned(), move |request| {
+    server.delete("/_delete/:suri".to_owned(), Box::new(move |request| {
         let con = clone.get();
         let mut resp = HttpResponse::default();
         resp.data = Some(HttpData::new(format!("{:#?}", request).as_bytes().to_vec()));
@@ -55,7 +55,7 @@ fn main() -> std::io::Result<()> {
 
     // fetches info about the shortened uri
     let clone = pool_arc.clone();
-    server.get("/_info/:suri".to_owned(), move|request| {
+    server.get("/_info/:suri".to_owned(), Box::new(move|request| {
         let con = clone.clone().get().unwrap();
         log::warn!("Useragent was {}", request.get_extra_header(String::from("User-Agent")).unwrap_or(String::from("not found")));
         let resp = HttpResponse::default();
