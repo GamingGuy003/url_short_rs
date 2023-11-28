@@ -142,7 +142,7 @@ checksum = "d77f7ec81a6d05a3abb01ab6eb7590f6083d08449fe5a1c8b1e620283546ccb7"
 [[package]]
 name = "http_serv"
 version = "0.4.0"
-source = "git+https://github.com/GamingGuy003/http_serv.git?branch=main#67c1bc547806e04cde60f1df164fe043a2b78151"
+source = "git+https://github.com/GamingGuy003/http_serv.git?branch=main#da9f5ab1b52209a098fd19f445bdfba0dd05bd72"
 dependencies = [
  "log",
  "num_cpus",
