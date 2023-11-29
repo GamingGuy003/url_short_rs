@@ -105,7 +105,7 @@ fn main() -> std::io::Result<()> {
         log::trace!("Redirecting to {r_uri}");
         HttpResponse::new(
             String::from("1.1"),
-            HttpStatus::PermanentRedirect,
+            HttpStatus::TemporaryRedirect,
             Some(vec![("Location".to_owned(), format!("{r_uri}"))]),
             None
         )
