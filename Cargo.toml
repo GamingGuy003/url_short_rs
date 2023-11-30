@@ -5,12 +5,16 @@ edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = []
+bundled_sql = ["r2d2_sqlite/bundled"]
+
 [dependencies]
 http_serv = { git = "https://github.com/GamingGuy003/http_serv.git", branch = "main", features = ["log", "num_cpus"]}
 http_base = { git = "https://github.com/GamingGuy003/http_base.git", branch = "main", features = ["log"]}
 log = "0.4.20"
 pretty_env_logger = "0.5.0"
 r2d2 = "0.8.10"
-r2d2_sqlite = { version = "0.23.0", features = ["bundled"] }
+r2d2_sqlite = "0.23.0"
 serde = { version = "1.0.193", features = ["serde_derive"] }
 serde_json = "1.0.108"
