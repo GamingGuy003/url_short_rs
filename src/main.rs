@@ -1,17 +1,18 @@
-const DB_FILE: &str = "shorts.db";
-
 use std::{sync::Arc, process::exit};
 
-use database::database::setup_table;
-use http_serv::{self, http::{server::HttpServer, http_structs::{HttpResponse, HttpData, HttpStatus, HttpRequest}}};
+use database::base_ops::setup_table;
+use http_base::http::http_structs::{HttpRequest, HttpResponse, HttpStatus, HttpData};
+use http_serv::http_server::server::HttpServer;
 use r2d2_sqlite::SqliteConnectionManager;
 
-use crate::{database::database::{get_details, delete_short_uri, add_real_uri, add_detail, fetch_real_uri}, structs::structs::{DetailEntry, Shorten}};
+use crate::{database::base_ops::{get_details, delete_short_uri, add_real_uri, add_detail, fetch_real_uri}, com_structs::structs::{DetailEntry, Shorten}};
 
-mod structs;
+mod com_structs;
 mod database;
 
 extern crate pretty_env_logger;
+
+const DB_FILE: &str = "shorts.db";
 
 fn main() -> std::io::Result<()> {
     pretty_env_logger::init_timed();
@@ -106,7 +107,7 @@ fn main() -> std::io::Result<()> {
         HttpResponse::new(
             String::from("1.1"),
             HttpStatus::TemporaryRedirect,
-            Some(vec![("Location".to_owned(), format!("{r_uri}"))]),
+            Some(vec![("Location".to_owned(), r_uri)]),
             None
         )
     }));
@@ -270,7 +271,7 @@ fn main() -> std::io::Result<()> {
         let page = match request.get_route_param(String::from(":page")) {
             Some(s_uri) => match s_uri.parse::<usize>() {
                 Ok(page) => {
-                    if page <= 0 {
+                    if page == 0 {
                         return HttpResponse::new(
                         String::from("1.1"),
                         HttpStatus::BadRequest,
@@ -301,7 +302,7 @@ fn main() -> std::io::Result<()> {
             }
         };
 
-        match get_details(connection, s_uri, page, 100 as usize) {
+        match get_details(connection, s_uri, page, 100_usize) {
             Ok(details) => {
                 let details_structs = details.iter().map(|elem| {
                     DetailEntry::new(elem.1.clone(), format!("{}", elem.0), elem.2.clone())

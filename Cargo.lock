@@ -140,13 +140,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d77f7ec81a6d05a3abb01ab6eb7590f6083d08449fe5a1c8b1e620283546ccb7"
 
 [[package]]
-name = "http_serv"
-version = "0.4.0"
-source = "git+https://github.com/GamingGuy003/http_serv.git?branch=main#bb1f838ec1525ef45329fbfd96f355ea99f975da"
+name = "http_base"
+version = "0.1.0"
+source = "git+https://github.com/GamingGuy003/http_base.git?branch=main#37b2228136186dc0eb9d27c7eebb97fcff462433"
 dependencies = [
  "log",
- "num_cpus",
  "num_enum",
+ "pretty_env_logger",
+]
+
+[[package]]
+name = "http_serv"
+version = "0.4.0"
+source = "git+https://github.com/GamingGuy003/http_serv.git?branch=main#81eb666bc5fe945c91ce0e61435be20597260a35"
+dependencies = [
+ "http_base",
+ "log",
+ "num_cpus",
  "pretty_env_logger",
  "scoped_threadpool",
 ]
@@ -203,9 +213,9 @@ dependencies = [
 
 [[package]]
 name = "linux-raw-sys"
-version = "0.4.11"
+version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "969488b55f8ac402214f3f5fd243ebb7206cf82de60d3172994707a4bcc2b829"
+checksum = "c4cd1a83af159aa67994778be9070f0ae1bd732942279cabb14f86f986a21456"
 
 [[package]]
 name = "lock_api"
@@ -566,6 +576,7 @@ checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
 name = "url_short"
 version = "0.1.0"
 dependencies = [
+ "http_base",
  "http_serv",
  "log",
  "pretty_env_logger",
@@ -777,18 +788,18 @@ dependencies = [
 
 [[package]]
 name = "zerocopy"
-version = "0.7.26"
+version = "0.7.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e97e415490559a91254a2979b4829267a57d2fcd741a98eee8b722fb57289aa0"
+checksum = "f43de342578a3a14a9314a2dab1942cbfcbe5686e1f91acdc513058063eafe18"
 dependencies = [
  "zerocopy-derive",
 ]
 
 [[package]]
 name = "zerocopy-derive"
-version = "0.7.26"
+version = "0.7.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dd7e48ccf166952882ca8bd778a43502c64f33bf94c12ebe2a7f08e5a0f6689f"
+checksum = "e1012d89e3acb79fad7a799ce96866cfb8098b74638465ea1b1533d35900ca90"
 dependencies = [
  "proc-macro2",
  "quote",
