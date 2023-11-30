@@ -43,6 +43,6 @@ Returns Data:
 
 ### Roadmap
 
-- [] Add percent encoding for routes
-- [] Add generic routes like *
-- [] Add subroutes
+- [ ] Add percent encoding for routes
+- [ ] Add generic routes like *
+- [ ] Add subroutes
