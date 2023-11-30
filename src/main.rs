@@ -31,6 +31,11 @@ fn main() -> std::io::Result<()> {
 
 
     let mut server = HttpServer::new("0.0.0.0".to_string(), "8443".to_string(), None, Vec::new(), None)?;
+
+    // stupid favicon requester
+    server.get("/favicon.ico".to_owned(), Box::new(|_| {
+        HttpResponse::new(String::from("1.1"), HttpStatus::NotFound, None, None)
+    }));
     
     // follow the requested uri
     let clone = pool_arc.clone();
